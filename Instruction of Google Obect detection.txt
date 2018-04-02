@@ -1,0 +1,148 @@
+# This is an instuction of using google object detection api to train our own dataset.
+# It is writen by T.Q. DENG in 3/22/2018 in CNV.
+# The directory of this project likes this. 
+# -models
+#   -research
+#     - ...
+#     - object-detection 
+#       - data
+#         - train.csv
+#         - test.csv
+#         - train.record
+#         - test.record
+#         - object-detection.pbtxt
+#       - training
+#         - object-detection.pbtxt
+#         - XXX.config (rfcn_resnet101_pets.config)
+#       - images
+#         - train
+#         - test
+#         - (all images and thier xml in directory train and test are also put here)
+#       -xml_to_csv.py
+#       -generate_tfrecord.py
+
+## step1 xml to csv
+# do this step in directory research/object-detection/
+
+mkdir data
+mkdir training
+mkdir images & cd images
+mkdir train 
+mkdir test
+# put all images and their xml in directorty images. the proportion of spliting images in directory train/test are 2:1.
+# change the code of xml_to_csv.py. It mainly was changed about this.
+'''
+def main():
+    for directory in ['train', 'test']:
+        image_path = os.path.join(os.getcwd(), 'images/{}'.format(directory))
+        xml_df = xml_to_csv(image_path)
+        xml_df.to_csv('data/{}_labels.csv'.format(directory), index=None)
+        print('Successfully converted xml to csv.')
+
+main()
+'''
+python xml_to_csv.py # you will find train.csv ans test.csv in directory data/ 
+
+## step2 generate tfrecord 
+# do this step in directory research/object-detection/
+
+# if you have several classes you should change the code here. i.e. add up else if statement in here, return 2; etc.
+'''
+def class_text_to_int(row_label):
+    if row_label == 'net': # change 'net' into your class name, if you have several classes add elif row_labels == 'dog': return 2 ... .
+        return 1
+    else:
+        None
+'''
+python generate_tfrecord.py --csv_input=data/train_labels.csv  --output_path=data/train.record
+python generate_tfrecord.py --csv_input=data/test_labels.csv  --output_path=data/test.record   # you will find train.record and test.record in data/
+
+
+## step3 do some preparations before trianig.
+# do this step in directory research/object-detection/
+
+# change the object-detection.pbtxt in directory data/ and training/. 
+
+'''
+item{
+ id: 1
+ name: 'net'
+}
+... # if you have several classes, put them below just like this. 
+
+'''
+
+# download model zoo from here https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/detection_model_zoo.md, extract and put it into  directiory obeject-detection/
+
+# download .config file from here https://github.com/tensorflow/models/tree/master/research/object_detection/samples/configs, put .config file into directory training/
+# change the .config code like here.
+'''
+model {
+  faster_rcnn {
+    num_classes: 1 # change it into  your class number 
+
+...
+
+train_config: {
+  batch_size: 1 # it can be change 24 and other
+  optimizer {
+    momentum_optimizer: {
+
+'''
+
+gradient_clipping_by_norm: 10.0
+  fine_tune_checkpoint: "rfcn_resnet101_coco_2018_01_28/model.ckpt" # change rfcn_resnet101_coco_2018_01_28 into your doenload model zoo name 
+  from_detection_checkpoint: true
+
+...
+
+train_input_reader: {
+  tf_record_input_reader {
+    input_path: "data/train.record" # change it into your directory that put train.record, commonly in directory data/
+  }
+  label_map_path: "data/object-detection.pbtxt" # change it into your directory that put object-detection.pbtxt, commonly in directory data/
+}
+
+'''
+eval_input_reader: {
+  tf_record_input_reader {
+    input_path: "data/test.record" # change it into your directory that put test.record, commonly in directory data/
+  }
+  label_map_path: "data/object-detection.pbtxt"  # change it into your directory that put object-detection.pbtxt, commonly in directory data/
+  shuffle: false
+  num_readers: 1
+}
+
+'''
+
+# export python path in directory research/ just like this when you begin to train. 
+near@server:~/dtq/object-google/models/research$ export PYTHONPATH=$PYTHONPATH:`pwd`:`pwd`/slim
+near@server:~/dtq/object-google/models/research$ cd object_detection/
+## step4 train model in directory object-detection/
+near@server:~/dtq/object-google/models/research/object_detection$ python train.py --logtostderr --train_dir=training/ --pipeline_config_path=training/rfcn_resnet101_pets.config 
+
+# --train_dir=training/ is the output result when you begin to train.
+# --pipiline_config_path=training/rfcn_resnet101_pets.config is the model config when you begin to train.
+
+
+## step5 test model in directory object-detection/
+# maybe you need export python path in directory research/ if you open a new termianl in directory object-detection/, do like this.
+# now in diretory object-detection/
+near@server:~/dtq/object-google/models/research$ cd ..
+near@server:~/dtq/object-google/models/research$ export PYTHONPATH=$PYTHONPATH:`pwd`:`pwd`/slim
+near@server:~/dtq/object-google/models/research$ cd object_detection/
+
+# run export_inference_graph_rfcn.sh
+
+'''
+python export_inference_graph.py \
+    --input_type image_tensor \
+    --pipeline_config_path training/rfcn_resnet101_pets.config \ #the rfcn_resnet101_pets.config in diretory training/ 
+    --trained_checkpoint_prefix training/model.ckpt-11737 \ # the model.ckpt-xxx in directory training/
+    --output_directory net_graph_rfcn # the frose graph file you want to output, if directory net_graph_rfcn is not exsist, it will create new one.
+'''
+
+# then use rfcn_object_detection_tutorial.ipynb to detect
+
+
+
